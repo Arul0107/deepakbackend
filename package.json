@@ -13,22 +13,24 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.96.0",
     "bcrypt": "^6.0.0",
-    "cors": "^2.8.6",
-    "dotenv": "^17.3.1",
-    "express": "^5.2.1",
     "express-rate-limit": "^8.2.1",
     "express-session": "^1.19.0",
     "google-auth-library": "^10.6.1",
     "helmet": "^8.1.0",
-    "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
-    "mysql2": "^3.18.0",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11"
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "express-validator": "^7.3.1",
+    "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.20.0",
+    "nodemon": "^3.1.14"
   }
 }

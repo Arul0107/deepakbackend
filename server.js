@@ -5,28 +5,44 @@ const cors = require("cors");
 const morgan = require("morgan");
 const db = require("./config/db");
 
-// 🔹 Route Imports
+// 🔹 Routes
+const studentRoutes = require("./routes/studentRoutes");
 const authRoutes = require("./routes/authRoutes");
-const adminRoutes = require("./routes/adminRoutes");
-const featureRoutes = require("./routes/featureroutes");
-const tourRoutes = require("./routes/tourRoutes");
-const itineraryRoutes = require("./routes/itineraryRoutes");
-const categoryRoutes = require("./routes/categories");
-const bookingRoutes = require("./routes/bookingRoutes");
-const userRoutes = require("./routes/userRoutes");
+
 const app = express();
+
+/* ==========================
+   🔥 CORS FIX (IMPORTANT)
+========================== */
+
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "https://admisiondemo.netlify.app/" // 🔥 CHANGE THIS
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow requests with no origin (like Postman)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        console.log("❌ Blocked by CORS:", origin);
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"]
+  })
+);
 
 /* ==========================
    🔹 MIDDLEWARE
 ========================== */
-
-// CORS (adjust origin in production)
-app.use(
-  cors({
-    origin: "*", // ⚠ change in production
-    credentials: true,
-  })
-);
 
 // Logger
 app.use(morgan("dev"));
@@ -35,52 +51,74 @@ app.use(morgan("dev"));
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// Debug logger
+app.use((req, res, next) => {
+  console.log(`📥 ${req.method} ${req.url} from ${req.headers.origin || "unknown"}`);
+  next();
+});
+
 /* ==========================
    🔹 ROUTES
 ========================== */
 
-// Auth Routes (Google Login → /auth/google)
-app.use("/auth", authRoutes);
+// Auth
+app.use("/api/auth", authRoutes);
 
-// Admin Routes
-app.use("/api/admin", adminRoutes);
+// Students
+app.use("/api/students", studentRoutes);
 
-// Other API Routes
-app.use("/api/features", featureRoutes);
-app.use("/api/tours", tourRoutes);
-app.use("/api/itinerary", itineraryRoutes);
-app.use("/api/categories", categoryRoutes);
-app.use("/api/bookings", bookingRoutes);
-app.use("/api/users", userRoutes);
-// Health Check
-app.get("/", (req, res) => {
+// Test route
+app.get("/api/test", (req, res) => {
   res.status(200).json({
     success: true,
-    message: "Backend Running Successfully 🚀",
+    message: "API working 🚀",
+    time: new Date().toISOString()
+  });
+});
+
+// Home route
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "Backend Running 🚀",
+    endpoints: {
+      auth: "/api/auth",
+      students: "/api/students",
+      test: "/api/test"
+    }
+  });
+});
+
+// Health check
+app.get("/health", (req, res) => {
+  res.json({
+    success: true,
+    message: "Server healthy",
+    timestamp: new Date().toISOString()
   });
 });
 
 /* ==========================
-   🔹 404 HANDLER
+   🔹 404
 ========================== */
 
 app.use((req, res) => {
   res.status(404).json({
     success: false,
-    message: "Route not found",
+    message: `Route not found: ${req.method} ${req.url}`
   });
 });
 
 /* ==========================
-   🔹 GLOBAL ERROR HANDLER
+   🔹 ERROR HANDLER
 ========================== */
 
 app.use((err, req, res, next) => {
-  console.error("❌ Server Error:", err);
+  console.error("❌ Error:", err.message);
 
-  res.status(err.status || 500).json({
+  res.status(500).json({
     success: false,
-    message: err.message || "Internal Server Error",
+    message: err.message || "Internal Server Error"
   });
 });
 
@@ -91,17 +129,20 @@ app.use((err, req, res, next) => {
 const startServer = async () => {
   try {
     const conn = await db.getConnection();
-    console.log("✅ Database connected successfully");
+    console.log("✅ DB Connected");
     conn.release();
 
     const PORT = process.env.PORT || 5000;
 
-    app.listen(PORT, () => {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log("=".repeat(40));
       console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`🌐 Render URL: https://your-backend.onrender.com`);
+      console.log("=".repeat(40));
     });
 
-  } catch (error) {
-    console.error("❌ Database connection failed:", error);
+  } catch (err) {
+    console.error("❌ DB Failed:", err);
     process.exit(1);
   }
 };

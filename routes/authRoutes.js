@@ -1,15 +1,55 @@
-const express = require('express');
+// backend/routes/authRoutes.js
+const express = require("express");
 const router = express.Router();
-const { googleLogin } = require("../controllers/userAuthController");
 
-const auth = require('../controllers/authController');
+const authController = require("../controllers/authController");
+const {verifyToken} = require("../middleware/authMiddleware");
+const {checkRole} = require("../middleware/roleMiddleware");
 
-router.post('/register', auth.register);
-router.post('/login', auth.login);
+/* LOGIN */
+router.post("/login", authController.login);
 
-// ✅ ADD THIS
-router.post('/create-admin', auth.createAdmin);
+/* CREATE USER */
+router.post(
+  "/create-user",
+  verifyToken,
+  checkRole("super_admin", "admin"),
+  authController.createUser
+);
 
-// 🔹 GOOGLE LOGIN
-router.post("/google", googleLogin);
-module.exports = router;
+/* GET USERS - Modified to allow more roles */
+router.get(
+  "/users",
+  verifyToken,
+  (req, res, next) => {
+    // Allow super_admin, admin, manager, and telecaller to view users
+    const allowedRoles = ["super_admin", "admin", "manager", "telecaller", "counselor", "staff"];
+    if (allowedRoles.includes(req.user.role)) {
+      next();
+    } else {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied. Insufficient permissions."
+      });
+    }
+  },
+  authController.getUsers
+);
+
+/* UPDATE USER */
+router.put(
+  "/users/:id",
+  verifyToken,
+  checkRole("super_admin", "admin"),
+  authController.updateUser
+);
+
+/* DELETE USER */
+router.delete(
+  "/users/:id",
+  verifyToken,
+  checkRole("super_admin"),
+  authController.deleteUser
+);
+
+module.exports = router;  
