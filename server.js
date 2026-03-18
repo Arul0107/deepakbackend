@@ -11,7 +11,7 @@ const authRoutes = require("./routes/authRoutes");
 const app = express();
 
 /* ==========================
-   🔥 CORS FIX
+   🔥 CORS CONFIG
 ========================== */
 
 const allowedOrigins = [
@@ -23,7 +23,8 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // allow Postman / server calls
+
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       } else {
@@ -37,8 +38,8 @@ app.use(
   })
 );
 
-// ✅ FIXED: Handle preflight OPTIONS requests - line 51
-app.options("/*", cors()); // Use "/*" instead of "*"
+// ❌ REMOVED (caused crash in Render)
+// app.options("/*", cors());
 
 /* ==========================
    🔹 MIDDLEWARE
@@ -99,10 +100,9 @@ app.get("/health", (req, res) => {
 });
 
 /* ==========================
-   🔹 404 - MUST BE LAST
+   🔹 404 HANDLER
 ========================== */
 
-// ✅ FIXED: Use wildcard for 404 - but without the asterisk error
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -133,6 +133,7 @@ const startServer = async () => {
     conn.release();
 
     const PORT = process.env.PORT || 5000;
+
     app.listen(PORT, "0.0.0.0", () => {
       console.log("=".repeat(40));
       console.log(`🚀 Server running on port ${PORT}`);
