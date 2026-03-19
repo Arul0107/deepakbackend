@@ -178,3 +178,96 @@ exports.deleteUser = async (req, res) => {
     });
   }
 };
+/* =========================
+   GET PROFILE
+========================= */
+exports.getProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const [rows] = await db.query(
+      "SELECT id, name, email, role FROM users WHERE id = ?",
+      [userId]
+    );
+
+    res.json({
+      success: true,
+      user: rows[0]
+    });
+
+  } catch (err) {
+    console.error("Get profile error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Error fetching profile"
+    });
+  }
+};
+
+/* =========================
+   UPDATE PROFILE
+========================= */
+exports.updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { name, email } = req.body;
+
+    await db.query(
+      "UPDATE users SET name=?, email=? WHERE id=?",
+      [name, email, userId]
+    );
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully"
+    });
+
+  } catch (err) {
+    console.error("Update profile error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Error updating profile"
+    });
+  }
+};
+
+/* =========================
+   CHANGE PASSWORD
+========================= */
+exports.changePassword = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { oldPassword, newPassword } = req.body;
+
+    const [rows] = await db.query(
+      "SELECT password FROM users WHERE id=?",
+      [userId]
+    );
+
+    const user = rows[0];
+
+    if (user.password !== oldPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Old password incorrect"
+      });
+    }
+
+    await db.query(
+      "UPDATE users SET password=? WHERE id=?",
+      [newPassword, userId]
+    );
+
+    res.json({
+      success: true,
+      message: "Password updated successfully"
+    });
+
+  } catch (err) {
+    console.error("Change password error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Error changing password"
+    });
+  }
+};

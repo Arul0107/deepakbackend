@@ -2,7 +2,6 @@
 const db = require('../config/db');
 
 // ==================== GET ALL STUDENTS (with user-based filtering) ====================
-// backend/controllers/studentController.js
 const getStudents = async (req, res) => {
   try {
     // Get the logged-in user from the request (set by auth middleware)
@@ -58,8 +57,8 @@ const getStudents = async (req, res) => {
     });
   }
 };
+
 // ==================== GET SINGLE STUDENT BY ID ====================
-// backend/controllers/studentController.js
 const getStudentById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -97,6 +96,7 @@ const getStudentById = async (req, res) => {
     });
   }
 };  
+
 // ==================== CREATE NEW STUDENT ====================
 const createStudent = async (req, res) => {
   try {
@@ -111,7 +111,7 @@ const createStudent = async (req, res) => {
     }
 
     const {
-      studentId, name, dateOfBirth, gender, mobile, email, address,
+      studentId, name, dateOfBirth, gender, mobile, whatsapp, email, address,
       tenth_percent, twelfth_percent, entrance_score,
       preferredCollege1, preferredCollege2, course,
       quota, caste, community, income, is_rural, is_sports_quota, 
@@ -172,9 +172,24 @@ const createStudent = async (req, res) => {
       });
     }
 
+    // Check if whatsapp already exists (if provided)
+    if (whatsapp) {
+      const [whatsappCheck] = await db.query(
+        'SELECT id FROM students WHERE whatsapp = ?', 
+        [whatsapp]
+      );
+      
+      if (whatsappCheck.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'WhatsApp number already exists'
+        });
+      }
+    }
+
     const query = `
       INSERT INTO students (
-        studentId, name, dateOfBirth, gender, mobile, email, address,
+        studentId, name, dateOfBirth, gender, mobile, whatsapp, email, address,
         tenth_percent, twelfth_percent, entrance_score,
         preferredCollege1, preferredCollege2, course,
         quota, caste, community, income, is_rural, is_sports_quota, 
@@ -185,7 +200,7 @@ const createStudent = async (req, res) => {
         counselingDate, assignedTo, assignedDate, notes,
         created_at, updated_at
       ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?,
         ?, ?, ?, ?, ?, ?, ?, ?,
@@ -198,7 +213,7 @@ const createStudent = async (req, res) => {
 
     const values = [
       studentId, name, dateOfBirth || null, gender || null, 
-      mobile, email, address || null,
+      mobile, whatsapp || null, email, address || null,
       tenth_percent || null, twelfth_percent || null, entrance_score || null,
       preferredCollege1 || null, preferredCollege2 || null, course,
       quota || 'General', caste || null, community || null, income || null, 
@@ -229,6 +244,9 @@ const createStudent = async (req, res) => {
       }
       if (error.sqlMessage.includes('mobile')) {
         return res.status(400).json({ success: false, message: 'Mobile number already exists' });
+      }
+      if (error.sqlMessage.includes('whatsapp')) {
+        return res.status(400).json({ success: false, message: 'WhatsApp number already exists' });
       }
     }
     
@@ -316,13 +334,23 @@ const updateStudent = async (req, res) => {
       }
     }
 
+    if (updateData.whatsapp && updateData.whatsapp !== currentStudent.whatsapp) {
+      const [whatsappCheck] = await db.query(
+        'SELECT id FROM students WHERE whatsapp = ? AND id != ?',
+        [updateData.whatsapp, id]
+      );
+      if (whatsappCheck.length > 0) {
+        return res.status(400).json({ success: false, message: 'WhatsApp number already exists' });
+      }
+    }
+
     // Build dynamic update query
     const fields = [];
     const values = [];
 
     const fieldMappings = {
       studentId: 'studentId', name: 'name', dateOfBirth: 'dateOfBirth',
-      gender: 'gender', mobile: 'mobile', email: 'email', address: 'address',
+      gender: 'gender', mobile: 'mobile', whatsapp: 'whatsapp', email: 'email', address: 'address',
       tenth_percent: 'tenth_percent', twelfth_percent: 'twelfth_percent',
       entrance_score: 'entrance_score', preferredCollege1: 'preferredCollege1',
       preferredCollege2: 'preferredCollege2', course: 'course', quota: 'quota',
@@ -379,6 +407,9 @@ const updateStudent = async (req, res) => {
       }
       if (error.sqlMessage.includes('mobile')) {
         return res.status(400).json({ success: false, message: 'Mobile number already exists' });
+      }
+      if (error.sqlMessage.includes('whatsapp')) {
+        return res.status(400).json({ success: false, message: 'WhatsApp number already exists' });
       }
     }
     
@@ -462,7 +493,7 @@ const bulkCreateStudents = async (req, res) => {
 
         const [result] = await db.query(
           `INSERT INTO students (
-            studentId, name, mobile, email, course, address,
+            studentId, name, mobile, whatsapp, email, course, address,
             fathers_name, fathers_mobile, mothers_name, mothers_mobile,
             dateOfBirth, gender,
             tenth_percent, twelfth_percent, entrance_score,
@@ -473,9 +504,9 @@ const bulkCreateStudents = async (req, res) => {
             status, preferredCollege1, preferredCollege2,
             assignedTo, assignedDate, notes,
             created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
           [
-            finalStudentId, student.name, student.mobile, student.email || null, 
+            finalStudentId, student.name, student.mobile, student.whatsapp || null, student.email || null, 
             student.course || 'To be updated', student.address || null,
             student.fathers_name || null, student.fathers_mobile || null,
             student.mothers_name || null, student.mothers_mobile || null,
@@ -641,7 +672,6 @@ const getStudentsByQuota = async (req, res) => {
 };
 
 // ==================== SEARCH STUDENTS ====================
-// backend/controllers/studentController.js
 const searchStudents = async (req, res) => {
   try {
     const { query } = req.query;
@@ -655,11 +685,11 @@ const searchStudents = async (req, res) => {
     
     let sqlQuery = `
       SELECT * FROM students 
-      WHERE (name LIKE ? OR email LIKE ? OR studentId LIKE ? OR mobile LIKE ?
+      WHERE (name LIKE ? OR email LIKE ? OR studentId LIKE ? OR mobile LIKE ? OR whatsapp LIKE ?
           OR course LIKE ? OR caste LIKE ? OR community LIKE ? OR assignedTo LIKE ? OR lead_source LIKE ?)
     `;
     
-    let queryParams = [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm];
+    let queryParams = [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm];
 
     // Apply role-based filtering
     if (loggedInUser.role === 'telecaller' || loggedInUser.role === 'counselor' || loggedInUser.role === 'staff') {

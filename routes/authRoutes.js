@@ -34,7 +34,13 @@ router.get(
     }
   },
   authController.getUsers
-);
+);/* PROFILE ROUTES */
+router.get("/profile", verifyToken, authController.getProfile);
+
+router.put("/profile", verifyToken, authController.updateProfile);
+
+router.put("/change-password", verifyToken, authController.changePassword);
+
 
 /* UPDATE USER */
 router.put(

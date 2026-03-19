@@ -7,6 +7,9 @@ const db = require("./config/db");
 // 🔹 Routes
 const studentRoutes = require("./routes/studentRoutes");
 const authRoutes = require("./routes/authRoutes");
+const collegeRoutes = require('./routes/collegeRoutes');
+const followupRoutes = require('./routes/followupRoutes');
+const notificationRoutes = require('./routes/notificationRoutes'); // 👈 ADD THIS
 
 const app = express();
 
@@ -68,6 +71,15 @@ app.use("/api/auth", authRoutes);
 // Students
 app.use("/api/students", studentRoutes);
 
+// Colleges
+app.use('/api/colleges', collegeRoutes);
+
+// Follow-ups
+app.use('/api/followups', followupRoutes);
+
+// Notifications 👈 ADD THIS
+app.use('/api/notifications', notificationRoutes);
+
 // Test route
 app.get("/api/test", (req, res) => {
   res.status(200).json({
@@ -85,6 +97,9 @@ app.get("/", (req, res) => {
     endpoints: {
       auth: "/api/auth",
       students: "/api/students",
+      colleges: "/api/colleges",
+      followups: "/api/followups",
+      notifications: "/api/notifications", // 👈 ADD THIS
       test: "/api/test"
     }
   });
