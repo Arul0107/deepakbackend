@@ -643,14 +643,17 @@ const getOverdueReminders = async (req, res) => {
 };
 
 // Mark reminder as sent
+// Mark reminder as sent
 const markReminderSent = async (req, res) => {
   try {
     const { id } = req.params;
     const loggedInUser = req.user;
 
-    // Check access
+    console.log('Marking reminder as sent for ID:', id, 'User:', loggedInUser?.name);
+
+    // First check if note exists
     const [notes] = await db.query(
-      `SELECT fn.*, s.assignedTo 
+      `SELECT fn.*, s.assignedTo, s.id as student_id, s.name as student_name
        FROM follow_up_notes fn
        JOIN students s ON fn.student_id = s.id
        WHERE fn.id = ?`,
@@ -658,14 +661,20 @@ const markReminderSent = async (req, res) => {
     );
 
     if (notes.length === 0) {
+      console.log('Note not found with ID:', id);
       return res.status(404).json({
         success: false,
         message: 'Note not found'
       });
     }
 
+    const noteData = notes[0];
+    console.log('Found note for student:', noteData.student_name, 'Assigned to:', noteData.assignedTo);
+
+    // Check access
     if (loggedInUser.role === 'counselor' || loggedInUser.role === 'staff' || loggedInUser.role === 'telecaller') {
-      if (notes[0].assignedTo !== loggedInUser.name) {
+      if (noteData.assignedTo !== loggedInUser.name) {
+        console.log('Access denied - user:', loggedInUser.name, 'assigned to:', noteData.assignedTo);
         return res.status(403).json({
           success: false,
           message: 'Access denied'
@@ -673,14 +682,51 @@ const markReminderSent = async (req, res) => {
       }
     }
 
+    // FIX: Remove reminder_sent_at column if it doesn't exist
+    // Only update the reminder_sent flag
     await db.query(
-      'UPDATE follow_up_notes SET reminder_sent = TRUE, reminder_sent_at = NOW() WHERE id = ?',
+      'UPDATE follow_up_notes SET reminder_sent = TRUE WHERE id = ?',
       [id]
     );
 
+    console.log('Successfully marked reminder as sent for ID:', id);
+
+    // Optionally, create a notification for this action
+    try {
+      // Get user_id from users table based on assignedTo name
+      const [users] = await db.query(
+        'SELECT id FROM users WHERE name = ?',
+        [loggedInUser.name]
+      );
+
+      if (users.length > 0) {
+        const userId = users[0].id;
+        
+        // Create notification
+        await db.query(
+          `INSERT INTO notifications 
+           (user_id, type, title, message, student_id, followup_id, note, created_at) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [
+            userId,
+            'reminder_sent',
+            '✅ Reminder Completed',
+            `Reminder marked as sent for ${noteData.student_name}`,
+            noteData.student_id,
+            id,
+            `Follow-up reminder completed`
+          ]
+        );
+        console.log('Notification created for user:', userId);
+      }
+    } catch (notifError) {
+      console.error('Error creating notification (non-critical):', notifError);
+      // Don't fail the main request if notification fails
+    }
+
     res.status(200).json({
       success: true,
-      message: 'Reminder marked as sent'
+      message: 'Reminder marked as sent successfully'
     });
   } catch (error) {
     console.error('❌ Error marking reminder as sent:', error);

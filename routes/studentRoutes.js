@@ -37,6 +37,35 @@ router.get('/:id', getStudentById);
 router.put('/:id', updateStudent);
 
 // ==================== ADMIN ONLY ROUTES ====================
+// In your backend route for fetching students
+router.get('/', verifyToken, async (req, res) => {
+  try {
+    const loggedInUser = req.user;
+    let query = 'SELECT * FROM students WHERE 1=1';
+    let params = [];
+
+    // Add role-based filtering
+    if (loggedInUser.role === 'telecaller' || loggedInUser.role === 'counselor' || loggedInUser.role === 'staff') {
+      query += ' AND assignedTo = ?';
+      params.push(loggedInUser.name);
+    }
+
+    // Add other filters (status, date, etc.) if needed
+
+    const [students] = await db.query(query, params);
+    
+    res.json({
+      success: true,
+      data: students
+    });
+  } catch (error) {
+    console.error('Error fetching students:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch students'
+    });
+  }
+});
 
 // POST routes - admin only
 router.post('/', adminOnly, createStudent);
