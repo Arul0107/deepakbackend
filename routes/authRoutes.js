@@ -1,61 +1,26 @@
 // backend/routes/authRoutes.js
-const express = require("express");
+const express = require('express');
 const router = express.Router();
+const authController = require('../controllers/authController');
+const { verifyToken, adminOnly, canManageUsers, canViewUsers } = require('../middleware/authMiddleware');
 
-const authController = require("../controllers/authController");
-const {verifyToken} = require("../middleware/authMiddleware");
-const {checkRole} = require("../middleware/roleMiddleware");
+// Public routes
+router.post('/login', authController.login);
 
-/* LOGIN */
-router.post("/login", authController.login);
+// Protected routes (all require authentication)
+router.use(verifyToken);
 
-/* CREATE USER */
-router.post(
-  "/create-user",
-  verifyToken,
-  checkRole("super_admin", "admin"),
-  authController.createUser
-);
+// Profile routes
+router.get('/profile', authController.getProfile);
+router.put('/profile', authController.updateProfile);
+router.put('/change-password', authController.changePassword);
 
-/* GET USERS - Modified to allow more roles */
-router.get(
-  "/users",
-  verifyToken,
-  (req, res, next) => {
-    // Allow super_admin, admin, manager, and telecaller to view users
-    const allowedRoles = ["super_admin", "admin", "manager", "telecaller", "counselor", "staff"];
-    if (allowedRoles.includes(req.user.role)) {
-      next();
-    } else {
-      return res.status(403).json({
-        success: false,
-        message: "Access denied. Insufficient permissions."
-      });
-    }
-  },
-  authController.getUsers
-);/* PROFILE ROUTES */
-router.get("/profile", verifyToken, authController.getProfile);
+// User management routes (admin only for create/delete)
+router.post('/create-user', canManageUsers, authController.createUser);
+router.delete('/users/:id', canManageUsers, authController.deleteUser);
 
-router.put("/profile", verifyToken, authController.updateProfile);
+// User viewing routes (all authenticated users can view)
+router.get('/users', canViewUsers, authController.getUsers);
+router.put('/users/:id', authController.updateUser); // Uses custom logic inside controller
 
-router.put("/change-password", verifyToken, authController.changePassword);
-
-
-/* UPDATE USER */
-router.put(
-  "/users/:id",
-  verifyToken,
-  checkRole("super_admin", "admin"),
-  authController.updateUser
-);
-
-/* DELETE USER */
-router.delete(
-  "/users/:id",
-  verifyToken,
-  checkRole("super_admin"),
-  authController.deleteUser
-);
-
-module.exports = router;  
+module.exports = router;

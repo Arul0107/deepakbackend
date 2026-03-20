@@ -37,6 +37,40 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
+// For Super Admin only (if you have a super_admin role)
+const superAdminOnly = (req, res, next) => {
+  if (req.user.role !== 'super_admin' && req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Super Admin only.'
+    });
+  }
+  next();
+};
+
+// For Admin and above (can manage users)
+const canManageUsers = (req, res, next) => {
+  if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Access denied. Admin privileges required.'
+    });
+  }
+  next();
+};
+
+// For viewing users (any authenticated user)
+const canViewUsers = (req, res, next) => {
+  // Allow all authenticated users to view users
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication required'
+    });
+  }
+  next();
+};
+
 const counselorOnly = (req, res, next) => {
   if (req.user.role !== 'counselor' && req.user.role !== 'staff' && req.user.role !== 'admin') {
     return res.status(403).json({
@@ -47,4 +81,11 @@ const counselorOnly = (req, res, next) => {
   next();
 };
 
-module.exports = { verifyToken, adminOnly, counselorOnly };
+module.exports = { 
+  verifyToken, 
+  adminOnly, 
+  superAdminOnly,
+  canManageUsers,
+  canViewUsers,
+  counselorOnly 
+};

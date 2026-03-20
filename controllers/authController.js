@@ -65,11 +65,28 @@ exports.login = async (req, res) => {
 
 /* =========================
    CREATE USER
+   - Admin only
 ========================= */
 
 exports.createUser = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    // Check if the current user is admin
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admins can create users'
+      });
+    }
+
+    const { name, email, password, role, status = 'active' } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, email and password are required'
+      });
+    }
 
     // Check if user exists
     const [existing] = await db.query(
@@ -84,9 +101,17 @@ exports.createUser = async (req, res) => {
       });
     }
 
+    // Validate role (prevent creating super_admin unless you're super_admin)
+    if (role === 'super_admin' && req.user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only super admins can create super admin users'
+      });
+    }
+
     await db.query(
-      "INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, 'active')",
-      [name, email, password, role]
+      "INSERT INTO users (name, email, password, role, status) VALUES (?, ?, ?, ?, ?)",
+      [name, email, password, role, status]
     );
 
     res.json({
@@ -105,12 +130,14 @@ exports.createUser = async (req, res) => {
 
 /* =========================
    GET USERS
+   - Authenticated users can view
 ========================= */
 
 exports.getUsers = async (req, res) => {
   try {
+    // Allow all authenticated users to view users
     const [users] = await db.query(
-      "SELECT id, name, email, role, status FROM users ORDER BY id DESC"
+      "SELECT id, name, email, role, status, created_at as createdAt FROM users ORDER BY id DESC"
     );
 
     res.json({
@@ -129,17 +156,55 @@ exports.getUsers = async (req, res) => {
 
 /* =========================
    UPDATE USER
+   - Admin can update any user
+   - Users can update themselves (except role)
 ========================= */
 
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, email, role, status } = req.body;
+    const currentUserId = req.user.id;
+    const currentUserRole = req.user.role;
 
-    await db.query(
-      "UPDATE users SET name=?, email=?, role=?, status=? WHERE id=?",
-      [name, email, role, status, id]
+    // Check permissions
+    const [targetUser] = await db.query(
+      "SELECT role FROM users WHERE id = ?",
+      [id]
     );
+
+    if (targetUser.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Allow if: user is updating themselves OR user is admin
+    const isSelf = parseInt(currentUserId) === parseInt(id);
+    const isAdmin = currentUserRole === 'admin' || currentUserRole === 'super_admin';
+
+    if (!isSelf && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only update your own profile'
+      });
+    }
+
+    // If not admin, prevent role/status changes
+    if (!isAdmin) {
+      // Users can only update name and email of themselves
+      await db.query(
+        "UPDATE users SET name=?, email=? WHERE id=?",
+        [name, email, id]
+      );
+    } else {
+      // Admin can update everything
+      await db.query(
+        "UPDATE users SET name=?, email=?, role=?, status=? WHERE id=?",
+        [name, email, role, status, id]
+      );
+    }
 
     res.json({
       success: true,
@@ -157,11 +222,51 @@ exports.updateUser = async (req, res) => {
 
 /* =========================
    DELETE USER
+   - Admin only (cannot delete themselves)
 ========================= */
 
 exports.deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
+    const currentUserId = req.user.id;
+    const currentUserRole = req.user.role;
+
+    // Check if user is admin
+    if (currentUserRole !== 'admin' && currentUserRole !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admins can delete users'
+      });
+    }
+
+    // Prevent deleting yourself
+    if (parseInt(currentUserId) === parseInt(id)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You cannot delete your own account'
+      });
+    }
+
+    // Check if user exists
+    const [user] = await db.query(
+      "SELECT id, role FROM users WHERE id = ?",
+      [id]
+    );
+
+    if (user.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
+
+    // Prevent deleting other admins if you're not super_admin
+    if (user[0].role === 'admin' && currentUserRole !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only super admins can delete other admins'
+      });
+    }
 
     await db.query("DELETE FROM users WHERE id=?", [id]);
 
@@ -178,6 +283,7 @@ exports.deleteUser = async (req, res) => {
     });
   }
 };
+
 /* =========================
    GET PROFILE
 ========================= */
@@ -186,9 +292,16 @@ exports.getProfile = async (req, res) => {
     const userId = req.user.id;
 
     const [rows] = await db.query(
-      "SELECT id, name, email, role FROM users WHERE id = ?",
+      "SELECT id, name, email, role, status FROM users WHERE id = ?",
       [userId]
     );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found"
+      });
+    }
 
     res.json({
       success: true,
