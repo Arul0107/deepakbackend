@@ -4,39 +4,29 @@ const db = require('../config/db');
 // ==================== GET ALL STUDENTS (with user-based filtering) ====================
 const getStudents = async (req, res) => {
   try {
-    // Get the logged-in user from the request (set by auth middleware)
     const loggedInUser = req.user;
-    
     console.log('👤 Logged in user:', loggedInUser);
 
     let query = 'SELECT * FROM students';
     let queryParams = [];
 
-    // Apply role-based filtering
     if (loggedInUser.role === 'super_admin' || loggedInUser.role === 'admin') {
-      // Super Admin and Admin can see all students
       console.log('👑 Admin/Super Admin - showing all students');
       query += ' ORDER BY created_at DESC';
-    } 
-    else if (loggedInUser.role === 'manager') {
-      // Managers can see all students as well (based on your users table)
+    } else if (loggedInUser.role === 'manager') {
       console.log('📊 Manager - showing all students');
       query += ' ORDER BY created_at DESC';
-    }
-    else if (loggedInUser.role === 'telecaller' || loggedInUser.role === 'counselor' || loggedInUser.role === 'staff') {
-      // Telecallers and counselors can only see students assigned to them
+    } else if (loggedInUser.role === 'telecaller' || loggedInUser.role === 'counselor' || loggedInUser.role === 'staff') {
       console.log('📞 Telecaller/Counselor - showing only assigned students');
       query += ' WHERE assignedTo = ? ORDER BY created_at DESC';
       queryParams.push(loggedInUser.name);
-    }
-    else {
-      // Other roles - show nothing
+    } else {
       console.log('👤 Other role - showing no students');
       query += ' WHERE 1=0 ORDER BY created_at DESC';
     }
 
     const [rows] = await db.query(query, queryParams);
-    
+
     res.status(200).json({
       success: true,
       count: rows.length,
@@ -50,11 +40,7 @@ const getStudents = async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error fetching students:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching students',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Error fetching students', error: error.message });
   }
 };
 
@@ -63,127 +49,88 @@ const getStudentById = async (req, res) => {
   try {
     const { id } = req.params;
     const loggedInUser = req.user;
-    
+
     let query = 'SELECT * FROM students WHERE id = ?';
     let queryParams = [id];
 
-    // Apply role-based filtering
     if (loggedInUser.role === 'telecaller' || loggedInUser.role === 'counselor' || loggedInUser.role === 'staff') {
       query += ' AND assignedTo = ?';
       queryParams.push(loggedInUser.name);
     }
-    // Super Admin, Admin, and Manager can access any student without additional filters
 
     const [rows] = await db.query(query, queryParams);
-    
+
     if (rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Student not found or access denied'
-      });
+      return res.status(404).json({ success: false, message: 'Student not found or access denied' });
     }
-    
-    res.status(200).json({
-      success: true,
-      data: rows[0]
-    });
+
+    res.status(200).json({ success: true, data: rows[0] });
   } catch (error) {
     console.error('❌ Error fetching student:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error fetching student',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Error fetching student', error: error.message });
   }
-};  
+};
 
 // ==================== CREATE NEW STUDENT ====================
 const createStudent = async (req, res) => {
   try {
     const loggedInUser = req.user;
-    
-    // Only admin can create students
+
     if (loggedInUser.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Only admins can create students.'
-      });
+      return res.status(403).json({ success: false, message: 'Access denied. Only admins can create students.' });
     }
 
     const {
       studentId, name, dateOfBirth, gender, mobile, whatsapp, email, address,
       tenth_percent, twelfth_percent, entrance_score,
       preferredCollege1, preferredCollege2, course,
-      quota, caste, community, income, is_rural, is_sports_quota, 
+      quota, caste, community, income, is_rural, is_sports_quota,
       is_first_graduate, is_single_parent,
       lead_source, remarks,
       fathers_name, fathers_mobile, mothers_name, mothers_mobile,
-      applicationDate, status, lastContacted, nextFollowUp, 
+      applicationDate, status, lastContacted, nextFollowUp,
       counselingDate, assignedTo, assignedDate, notes
     } = req.body;
 
     console.log('📥 Creating student with data:', req.body);
 
-    // Validation - Required fields
-    if (!studentId || !name || !email || !mobile || !course) {
+    // ── Required fields: email is NOT required ──
+    if (!studentId || !name || !mobile || !course) {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields',
-        required: ['studentId', 'name', 'email', 'mobile', 'course']
+        required: ['studentId', 'name', 'mobile', 'course']
       });
     }
 
-    // Check if email already exists
-    const [emailCheck] = await db.query(
-      'SELECT id FROM students WHERE email = ?', 
-      [email]
-    );
-    
-    if (emailCheck.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Email already exists'
-      });
+    // ── Email duplicate check: only run if a non-empty email is provided ──
+    if (email && email.trim() !== '') {
+      const [emailCheck] = await db.query(
+        'SELECT id FROM students WHERE email = ?',
+        [email.trim()]
+      );
+      if (emailCheck.length > 0) {
+        return res.status(400).json({ success: false, message: 'Email already exists' });
+      }
     }
 
     // Check if studentId already exists
-    const [idCheck] = await db.query(
-      'SELECT id FROM students WHERE studentId = ?', 
-      [studentId]
-    );
-    
+    const [idCheck] = await db.query('SELECT id FROM students WHERE studentId = ?', [studentId]);
     if (idCheck.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Student ID already exists'
-      });
+      return res.status(400).json({ success: false, message: 'Student ID already exists' });
     }
 
     // Check if mobile already exists
-    const [mobileCheck] = await db.query(
-      'SELECT id FROM students WHERE mobile = ?', 
-      [mobile]
-    );
-    
+    const [mobileCheck] = await db.query('SELECT id FROM students WHERE mobile = ?', [mobile]);
     if (mobileCheck.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Mobile number already exists'
-      });
+      return res.status(400).json({ success: false, message: 'Mobile number already exists' });
     }
 
     // Check if whatsapp already exists (if provided)
-    if (whatsapp) {
-      const [whatsappCheck] = await db.query(
-        'SELECT id FROM students WHERE whatsapp = ?', 
-        [whatsapp]
-      );
-      
+    if (whatsapp && whatsapp.trim() !== '') {
+      const [whatsappCheck] = await db.query('SELECT id FROM students WHERE whatsapp = ?', [whatsapp]);
       if (whatsappCheck.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'WhatsApp number already exists'
-        });
+        return res.status(400).json({ success: false, message: 'WhatsApp number already exists' });
       }
     }
 
@@ -192,11 +139,11 @@ const createStudent = async (req, res) => {
         studentId, name, dateOfBirth, gender, mobile, whatsapp, email, address,
         tenth_percent, twelfth_percent, entrance_score,
         preferredCollege1, preferredCollege2, course,
-        quota, caste, community, income, is_rural, is_sports_quota, 
+        quota, caste, community, income, is_rural, is_sports_quota,
         is_first_graduate, is_single_parent,
         lead_source, remarks,
         fathers_name, fathers_mobile, mothers_name, mothers_mobile,
-        applicationDate, status, lastContacted, nextFollowUp, 
+        applicationDate, status, lastContacted, nextFollowUp,
         counselingDate, assignedTo, assignedDate, notes,
         created_at, updated_at
       ) VALUES (
@@ -212,11 +159,14 @@ const createStudent = async (req, res) => {
     `;
 
     const values = [
-      studentId, name, dateOfBirth || null, gender || null, 
-      mobile, whatsapp || null, email, address || null,
+      studentId, name, dateOfBirth || null, gender || null,
+      mobile, whatsapp || null,
+      // email: store null if blank so unique constraint doesn't fire on empty strings
+      (email && email.trim() !== '') ? email.trim() : null,
+      address || null,
       tenth_percent || null, twelfth_percent || null, entrance_score || null,
       preferredCollege1 || null, preferredCollege2 || null, course,
-      quota || 'General', caste || null, community || null, income || null, 
+      quota || 'General', caste || null, community || null, income || null,
       is_rural ? 1 : 0, is_sports_quota ? 1 : 0, is_first_graduate ? 1 : 0, is_single_parent ? 1 : 0,
       lead_source || 'Other', remarks || null,
       fathers_name || null, fathers_mobile || null, mothers_name || null, mothers_mobile || null,
@@ -227,14 +177,10 @@ const createStudent = async (req, res) => {
     const [result] = await db.query(query, values);
     const [newStudent] = await db.query('SELECT * FROM students WHERE id = ?', [result.insertId]);
 
-    res.status(201).json({
-      success: true,
-      message: 'Student created successfully',
-      data: newStudent[0]
-    });
+    res.status(201).json({ success: true, message: 'Student created successfully', data: newStudent[0] });
   } catch (error) {
     console.error('❌ Error creating student:', error);
-    
+
     if (error.code === 'ER_DUP_ENTRY') {
       if (error.sqlMessage.includes('email')) {
         return res.status(400).json({ success: false, message: 'Email already exists' });
@@ -249,12 +195,8 @@ const createStudent = async (req, res) => {
         return res.status(400).json({ success: false, message: 'WhatsApp number already exists' });
       }
     }
-    
-    res.status(500).json({
-      success: false,
-      message: 'Error creating student',
-      error: error.message
-    });
+
+    res.status(500).json({ success: false, message: 'Error creating student', error: error.message });
   }
 };
 
@@ -267,7 +209,6 @@ const updateStudent = async (req, res) => {
 
     console.log('📝 Updating student:', id, 'with data:', updateData);
 
-    // Check if student exists and user has access
     let accessQuery = 'SELECT * FROM students WHERE id = ?';
     let accessParams = [id];
 
@@ -277,24 +218,17 @@ const updateStudent = async (req, res) => {
     }
 
     const [existing] = await db.query(accessQuery, accessParams);
-    
     if (existing.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Student not found or access denied'
-      });
+      return res.status(404).json({ success: false, message: 'Student not found or access denied' });
     }
 
     const currentStudent = existing[0];
 
-    // Only admin can update certain fields
     if (loggedInUser.role !== 'admin') {
-      // Counselors can only update specific fields
       const allowedFields = ['status', 'lastContacted', 'nextFollowUp', 'notes', 'remarks'];
       const restrictedFields = Object.keys(updateData).filter(
         key => !allowedFields.includes(key) && key !== 'assignedTo'
       );
-      
       if (restrictedFields.length > 0) {
         return res.status(403).json({
           success: false,
@@ -303,11 +237,11 @@ const updateStudent = async (req, res) => {
       }
     }
 
-    // Check for unique fields if they are being updated
-    if (updateData.email && updateData.email !== currentStudent.email) {
+    // ── Email duplicate check: only run if a non-empty email is provided and it changed ──
+    if (updateData.email && updateData.email.trim() !== '' && updateData.email.trim() !== currentStudent.email) {
       const [emailCheck] = await db.query(
         'SELECT id FROM students WHERE email = ? AND id != ?',
-        [updateData.email, id]
+        [updateData.email.trim(), id]
       );
       if (emailCheck.length > 0) {
         return res.status(400).json({ success: false, message: 'Email already exists' });
@@ -334,7 +268,7 @@ const updateStudent = async (req, res) => {
       }
     }
 
-    if (updateData.whatsapp && updateData.whatsapp !== currentStudent.whatsapp) {
+    if (updateData.whatsapp && updateData.whatsapp.trim() !== '' && updateData.whatsapp !== currentStudent.whatsapp) {
       const [whatsappCheck] = await db.query(
         'SELECT id FROM students WHERE whatsapp = ? AND id != ?',
         [updateData.whatsapp, id]
@@ -369,11 +303,21 @@ const updateStudent = async (req, res) => {
     Object.keys(updateData).forEach(key => {
       if (fieldMappings[key] && updateData[key] !== undefined) {
         let value = updateData[key];
+
+        // Boolean fields
         if (['is_rural', 'is_sports_quota', 'is_first_graduate', 'is_single_parent'].includes(key)) {
           value = value ? 1 : 0;
         }
+        // email: store null if blank so unique constraint doesn't fire
+        else if (key === 'email') {
+          value = (value && value.trim() !== '') ? value.trim() : null;
+        }
+        else {
+          value = value || null;
+        }
+
         fields.push(`${fieldMappings[key]} = ?`);
-        values.push(value || null);
+        values.push(value);
       }
     });
 
@@ -387,17 +331,12 @@ const updateStudent = async (req, res) => {
     values.push(id);
 
     await db.query(query, values);
-
     const [updatedStudent] = await db.query('SELECT * FROM students WHERE id = ?', [id]);
 
-    res.status(200).json({
-      success: true,
-      message: 'Student updated successfully',
-      data: updatedStudent[0]
-    });
+    res.status(200).json({ success: true, message: 'Student updated successfully', data: updatedStudent[0] });
   } catch (error) {
     console.error('❌ Error updating student:', error);
-    
+
     if (error.code === 'ER_DUP_ENTRY') {
       if (error.sqlMessage.includes('email')) {
         return res.status(400).json({ success: false, message: 'Email already exists' });
@@ -412,12 +351,8 @@ const updateStudent = async (req, res) => {
         return res.status(400).json({ success: false, message: 'WhatsApp number already exists' });
       }
     }
-    
-    res.status(500).json({
-      success: false,
-      message: 'Error updating student',
-      error: error.message
-    });
+
+    res.status(500).json({ success: false, message: 'Error updating student', error: error.message });
   }
 };
 
@@ -427,12 +362,8 @@ const deleteStudent = async (req, res) => {
     const { id } = req.params;
     const loggedInUser = req.user;
 
-    // Only admin can delete students
     if (loggedInUser.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Only admins can delete students.'
-      });
+      return res.status(403).json({ success: false, message: 'Access denied. Only admins can delete students.' });
     }
 
     const [existing] = await db.query('SELECT id FROM students WHERE id = ?', [id]);
@@ -441,7 +372,6 @@ const deleteStudent = async (req, res) => {
     }
 
     await db.query('DELETE FROM students WHERE id = ?', [id]);
-
     res.status(200).json({ success: true, message: 'Student deleted successfully' });
   } catch (error) {
     console.error('❌ Error deleting student:', error);
@@ -454,21 +384,14 @@ const bulkCreateStudents = async (req, res) => {
   try {
     const loggedInUser = req.user;
 
-    // Only admin can bulk create students
     if (loggedInUser.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Only admins can bulk import students.'
-      });
+      return res.status(403).json({ success: false, message: 'Access denied. Only admins can bulk import students.' });
     }
 
     const students = req.body;
-    
+
     if (!Array.isArray(students) || students.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Please provide an array of students'
-      });
+      return res.status(400).json({ success: false, message: 'Please provide an array of students' });
     }
 
     console.log(`📦 Bulk importing ${students.length} students`);
@@ -478,11 +401,11 @@ const bulkCreateStudents = async (req, res) => {
 
     for (let i = 0; i < students.length; i++) {
       const student = students[i];
-      
+
       try {
         if (!student.name || !student.mobile) {
-          errors.push({ 
-            row: i + 2, 
+          errors.push({
+            row: i + 2,
             error: `Missing required fields: ${!student.name ? 'Name' : ''} ${!student.mobile ? 'Mobile' : ''}`.trim(),
             data: student
           });
@@ -490,6 +413,9 @@ const bulkCreateStudents = async (req, res) => {
         }
 
         const finalStudentId = student.studentId || `STU${Date.now()}-${Math.random().toString(36).substr(2, 5)}-${i}`;
+
+        // ── email: store null if blank ──
+        const emailValue = (student.email && student.email.trim() !== '') ? student.email.trim() : null;
 
         const [result] = await db.query(
           `INSERT INTO students (
@@ -506,7 +432,8 @@ const bulkCreateStudents = async (req, res) => {
             created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
           [
-            finalStudentId, student.name, student.mobile, student.whatsapp || null, student.email || null, 
+            finalStudentId, student.name, student.mobile, student.whatsapp || null,
+            emailValue,
             student.course || 'To be updated', student.address || null,
             student.fathers_name || null, student.fathers_mobile || null,
             student.mothers_name || null, student.mothers_mobile || null,
@@ -534,8 +461,8 @@ const bulkCreateStudents = async (req, res) => {
 
       } catch (error) {
         console.error(`❌ Error importing row ${i + 2}:`, error.message);
-        errors.push({ 
-          row: i + 2, 
+        errors.push({
+          row: i + 2,
           error: error.message,
           sqlMessage: error.sqlMessage,
           data: student
@@ -562,14 +489,10 @@ const bulkAssignStudents = async (req, res) => {
     const { studentIds, assignedTo, assignedDate, status } = req.body;
     const loggedInUser = req.user;
 
-    // Only admin can bulk assign students
     if (loggedInUser.role !== 'admin') {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied. Only admins can bulk assign students.'
-      });
+      return res.status(403).json({ success: false, message: 'Access denied. Only admins can bulk assign students.' });
     }
-    
+
     if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
       return res.status(400).json({ success: false, message: 'Please provide an array of student IDs' });
     }
@@ -581,14 +504,10 @@ const bulkAssignStudents = async (req, res) => {
     console.log(`📦 Bulk assigning ${studentIds.length} students to ${assignedTo}`);
 
     const placeholders = studentIds.map(() => '?').join(',');
-    
+
     const query = `
       UPDATE students 
-      SET 
-        assignedTo = ?,
-        assignedDate = ?,
-        status = ?,
-        updated_at = NOW()
+      SET assignedTo = ?, assignedDate = ?, status = ?, updated_at = NOW()
       WHERE id IN (${placeholders})
     `;
 
@@ -600,7 +519,6 @@ const bulkAssignStudents = async (req, res) => {
     ];
 
     const [result] = await db.query(query, values);
-
     const [updatedStudents] = await db.query(
       `SELECT * FROM students WHERE id IN (${placeholders})`,
       studentIds
@@ -609,10 +527,7 @@ const bulkAssignStudents = async (req, res) => {
     res.status(200).json({
       success: true,
       message: `Successfully assigned ${result.affectedRows} students to ${assignedTo}`,
-      data: {
-        affectedRows: result.affectedRows,
-        students: updatedStudents
-      }
+      data: { affectedRows: result.affectedRows, students: updatedStudents }
     });
 
   } catch (error) {
@@ -626,7 +541,7 @@ const getStudentsByStatus = async (req, res) => {
   try {
     const { status } = req.params;
     const loggedInUser = req.user;
-    
+
     let query = 'SELECT * FROM students WHERE status = ?';
     let queryParams = [status];
 
@@ -634,11 +549,10 @@ const getStudentsByStatus = async (req, res) => {
       query += ' AND assignedTo = ?';
       queryParams.push(loggedInUser.name);
     }
-    
-    query += ' ORDER BY created_at DESC';
 
+    query += ' ORDER BY created_at DESC';
     const [rows] = await db.query(query, queryParams);
-    
+
     res.status(200).json({ success: true, count: rows.length, data: rows });
   } catch (error) {
     console.error('❌ Error fetching students by status:', error);
@@ -651,7 +565,7 @@ const getStudentsByQuota = async (req, res) => {
   try {
     const { quota } = req.params;
     const loggedInUser = req.user;
-    
+
     let query = 'SELECT * FROM students WHERE quota = ?';
     let queryParams = [quota];
 
@@ -659,11 +573,10 @@ const getStudentsByQuota = async (req, res) => {
       query += ' AND assignedTo = ?';
       queryParams.push(loggedInUser.name);
     }
-    
-    query += ' ORDER BY created_at DESC';
 
+    query += ' ORDER BY created_at DESC';
     const [rows] = await db.query(query, queryParams);
-    
+
     res.status(200).json({ success: true, count: rows.length, data: rows });
   } catch (error) {
     console.error('❌ Error fetching students by quota:', error);
@@ -676,32 +589,30 @@ const searchStudents = async (req, res) => {
   try {
     const { query } = req.query;
     const loggedInUser = req.user;
-    
+
     if (!query) {
       return res.status(400).json({ success: false, message: 'Search query is required' });
     }
 
     const searchTerm = `%${query}%`;
-    
+
     let sqlQuery = `
       SELECT * FROM students 
       WHERE (name LIKE ? OR email LIKE ? OR studentId LIKE ? OR mobile LIKE ? OR whatsapp LIKE ?
           OR course LIKE ? OR caste LIKE ? OR community LIKE ? OR assignedTo LIKE ? OR lead_source LIKE ?)
     `;
-    
-    let queryParams = [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm, searchTerm];
 
-    // Apply role-based filtering
+    let queryParams = [searchTerm, searchTerm, searchTerm, searchTerm, searchTerm,
+      searchTerm, searchTerm, searchTerm, searchTerm, searchTerm];
+
     if (loggedInUser.role === 'telecaller' || loggedInUser.role === 'counselor' || loggedInUser.role === 'staff') {
       sqlQuery += ' AND assignedTo = ?';
       queryParams.push(loggedInUser.name);
     }
-    // Super Admin, Admin, and Manager can search all students
-    
-    sqlQuery += ' ORDER BY created_at DESC';
 
+    sqlQuery += ' ORDER BY created_at DESC';
     const [rows] = await db.query(sqlQuery, queryParams);
-    
+
     res.status(200).json({ success: true, count: rows.length, data: rows });
   } catch (error) {
     console.error('❌ Error searching students:', error);
@@ -713,7 +624,7 @@ const searchStudents = async (req, res) => {
 const getStudentStats = async (req, res) => {
   try {
     const loggedInUser = req.user;
-    
+
     let query = `
       SELECT 
         COUNT(*) as total_students,
@@ -730,7 +641,7 @@ const getStudentStats = async (req, res) => {
         SUM(CASE WHEN DATE(nextFollowUp) = CURDATE() THEN 1 ELSE 0 END) as today_followup
       FROM students
     `;
-    
+
     let queryParams = [];
 
     if (loggedInUser.role === 'counselor' || loggedInUser.role === 'staff') {
@@ -739,8 +650,7 @@ const getStudentStats = async (req, res) => {
     }
 
     const [stats] = await db.query(query, queryParams);
-    
-    // Add assigned/unassigned counts (only for admin)
+
     if (loggedInUser.role === 'admin') {
       const [counts] = await db.query(`
         SELECT 
@@ -748,11 +658,10 @@ const getStudentStats = async (req, res) => {
           SUM(CASE WHEN assignedTo IS NULL OR assignedTo = '' THEN 1 ELSE 0 END) as unassigned
         FROM students
       `);
-      
       stats[0].assigned = counts[0].assigned || 0;
       stats[0].unassigned = counts[0].unassigned || 0;
     }
-    
+
     res.status(200).json({ success: true, data: stats[0] });
   } catch (error) {
     console.error('❌ Error fetching student stats:', error);
@@ -764,7 +673,7 @@ const getStudentStats = async (req, res) => {
 const getTodayFollowUps = async (req, res) => {
   try {
     const loggedInUser = req.user;
-    
+
     let query = `SELECT * FROM students WHERE DATE(nextFollowUp) = CURDATE()`;
     let queryParams = [];
 
@@ -772,11 +681,10 @@ const getTodayFollowUps = async (req, res) => {
       query += ' AND assignedTo = ?';
       queryParams.push(loggedInUser.name);
     }
-    
-    query += ' ORDER BY nextFollowUp ASC';
 
+    query += ' ORDER BY nextFollowUp ASC';
     const [rows] = await db.query(query, queryParams);
-    
+
     res.status(200).json({ success: true, count: rows.length, data: rows });
   } catch (error) {
     console.error('❌ Error fetching today follow-ups:', error);
@@ -788,7 +696,7 @@ const getTodayFollowUps = async (req, res) => {
 const exportStudents = async (req, res) => {
   try {
     const loggedInUser = req.user;
-    
+
     let query = 'SELECT * FROM students';
     let queryParams = [];
 
@@ -796,11 +704,10 @@ const exportStudents = async (req, res) => {
       query += ' WHERE assignedTo = ?';
       queryParams.push(loggedInUser.name);
     }
-    
-    query += ' ORDER BY created_at DESC';
 
+    query += ' ORDER BY created_at DESC';
     const [rows] = await db.query(query, queryParams);
-    
+
     res.status(200).json({ success: true, count: rows.length, data: rows });
   } catch (error) {
     console.error('❌ Error exporting students:', error);
