@@ -10,6 +10,7 @@ const authRoutes = require("./routes/authRoutes");
 const collegeRoutes = require('./routes/collegeRoutes');
 const followupRoutes = require('./routes/followupRoutes');
 const notificationRoutes = require('./routes/notificationRoutes'); // 👈 ADD THIS
+const counselorRoutes = require('./routes/counselorRoutes');
 
 const app = express();
 
@@ -79,7 +80,8 @@ app.use('/api/followups', followupRoutes);
 
 // Notifications 👈 ADD THIS
 app.use('/api/notifications', notificationRoutes);
-
+ 
+app.use('/api/counselor', counselorRoutes);
 // Test route
 app.get("/api/test", (req, res) => {
   res.status(200).json({
