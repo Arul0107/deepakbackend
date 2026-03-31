@@ -1,7 +1,7 @@
 // backend/routes/studentRoutes.js
 const express = require('express');
 const router = express.Router();
-const { verifyToken, adminOnly, counselorOnly } = require('../middleware/authMiddleware');
+const { verifyToken, adminOnly, managerOnly, counselorOnly, telecallerOnly } = require('../middleware/authMiddleware');
 const {
   getStudents,
   getStudentById,
@@ -15,64 +15,79 @@ const {
   searchStudents,
   getStudentStats,
   getTodayFollowUps,
-  exportStudents
+  exportStudents,
+  getBulkImportTemplate
 } = require('../controllers/studentController');
 
-// Apply auth middleware to all routes
+// ==================== MIDDLEWARE ====================
+// Apply authentication to all routes
 router.use(verifyToken);
 
-// ==================== PUBLIC ROUTES (authenticated users) ====================
+// ==================== PUBLIC ROUTES (Authenticated Users) ====================
+// These routes are accessible by all authenticated users with role-based filtering in controllers
 
-// GET routes - accessible by all authenticated users (with role-based filtering in controller)
+// GET routes - All authenticated users can access (controllers handle role-based filtering)
 router.get('/', getStudents);
 router.get('/stats', getStudentStats);
 router.get('/search', searchStudents);
 router.get('/today-followups', getTodayFollowUps);
 router.get('/export', exportStudents);
+router.get('/bulk/template', getBulkImportTemplate);
 router.get('/status/:status', getStudentsByStatus);
 router.get('/quota/:quota', getStudentsByQuota);
 router.get('/:id', getStudentById);
 
-// PUT routes - accessible by all authenticated users (with role-based checks in controller)
+// PUT route - All authenticated users can update (controllers handle role-based checks)
 router.put('/:id', updateStudent);
 
-// ==================== ADMIN ONLY ROUTES ====================
-// In your backend route for fetching students
-router.get('/', verifyToken, async (req, res) => {
-  try {
-    const loggedInUser = req.user;
-    let query = 'SELECT * FROM students WHERE 1=1';
-    let params = [];
+// ==================== ADMIN & MANAGER ROUTES ====================
+// Routes that require admin or manager privileges
 
-    // Add role-based filtering
-    if (loggedInUser.role === 'telecaller' || loggedInUser.role === 'counselor' || loggedInUser.role === 'staff') {
-      query += ' AND assignedTo = ?';
-      params.push(loggedInUser.name);
-    }
-
-    // Add other filters (status, date, etc.) if needed
-
-    const [students] = await db.query(query, params);
-    
-    res.json({
-      success: true,
-      data: students
-    });
-  } catch (error) {
-    console.error('Error fetching students:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch students'
-    });
+// Create single student - Admin, Manager, Telecaller, Counselor can create
+router.post('/', (req, res, next) => {
+  // Allow admin, manager, telecaller, counselor
+  if (req.user.role === 'admin' || req.user.role === 'manager' || 
+      req.user.role === 'telecaller' || req.user.role === 'counselor') {
+    return createStudent(req, res);
   }
+  return res.status(403).json({ 
+    success: false, 
+    message: 'Access denied. Only admins, managers, telecallers, and counselors can create students.' 
+  });
 });
 
-// POST routes - admin only
-router.post('/', adminOnly, createStudent);
-router.post('/bulk', adminOnly, bulkCreateStudents);
-router.post('/bulk-assign', adminOnly, bulkAssignStudents);
+// Bulk create students - Admin, Manager, Telecaller can bulk import
+router.post('/bulk', (req, res, next) => {
+  // Allow admin, manager, telecaller
+  if (req.user.role === 'admin' || req.user.role === 'manager' || req.user.role === 'telecaller') {
+    return bulkCreateStudents(req, res);
+  }
+  return res.status(403).json({ 
+    success: false, 
+    message: 'Access denied. Only admins, managers, and telecallers can bulk import students.' 
+  });
+});
 
-// DELETE routes - admin only
-router.delete('/:id', adminOnly, deleteStudent);
+// Bulk assign students - Admin and Manager only
+router.post('/bulk-assign', (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
+    return bulkAssignStudents(req, res);
+  }
+  return res.status(403).json({ 
+    success: false, 
+    message: 'Access denied. Only admins and managers can bulk assign students.' 
+  });
+});
+
+// Delete student - Admin and Manager only
+router.delete('/:id', (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.role === 'manager') {
+    return deleteStudent(req, res);
+  }
+  return res.status(403).json({ 
+    success: false, 
+    message: 'Access denied. Only admins and managers can delete students.' 
+  });
+});
 
 module.exports = router;
